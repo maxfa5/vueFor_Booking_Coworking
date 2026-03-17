@@ -2,13 +2,10 @@
   <div class="bookings-list">
     <h2>Список бронирований</h2>
     
-    <!-- Индикатор загрузки -->
     <div v-if="loading" class="loading">Загрузка...</div>
     
-    <!-- Сообщение об ошибке -->
     <div v-if="error" class="error">{{ error }}</div>
     
-    <!-- Таблица бронирований -->
     <table v-if="!loading && bookings.data?.length" class="table">
       <thead>
         <tr>
@@ -38,12 +35,10 @@
       </tbody>
     </table>
     
-    <!-- Пустое состояние -->
     <div v-else-if="!loading && !bookings.data?.length" class="empty">
       Нет бронирований
     </div>
     
-    <!-- Пагинация -->
     <div v-if="bookings.links" class="pagination">
       <button 
         v-for="link in bookings.links" 
