@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
 
-const backendUrl = "http://127.0.0.1:8000/api"
+const backendUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null,
@@ -11,6 +11,12 @@ export const useAuthStore = defineStore('auth', {
   }),
   
   actions: {
+    setAuthHeader() {
+      if (this.token) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`;
+      }
+    },
+
     async login(credentials) {
       this.errorMessage = "";
       
@@ -62,7 +68,9 @@ export const useAuthStore = defineStore('auth', {
     
     async logout() {
       try {
-        const response = await axios.get(backendUrl + '/logout', {
+        this.setAuthHeader();
+
+        const response = await axios.post(backendUrl + '/logout', {
           headers: {
             Authorization: 'Bearer ' + this.token
           }
