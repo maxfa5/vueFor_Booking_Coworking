@@ -6,10 +6,12 @@ import UserList from './components/UserList.vue'
 import UserDetail from './components/UserDetail.vue'
 import BuildingList from './components/BuildingList.vue' 
 import BuildingEdit from './components/BuildingEdit.vue'
+import HomePage from '@/components/HomePage.vue'; 
 const routes = [
   {
     path: '/',
-    redirect: '/bookings'
+    name: 'home',
+    component: HomePage            
   },
   {
     path: '/bookings',

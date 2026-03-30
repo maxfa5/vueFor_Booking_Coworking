@@ -139,7 +139,6 @@ const editBuilding = (id) => {
     return
   }
   
-  // Переход на страницу редактирования здания
   router.push(`/buildings/${id}/edit`)
   console.log('Redirecting to edit building:', id)
 }
