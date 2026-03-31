@@ -1,72 +1,73 @@
 <template>
-  <div class="app-container">
-    <Menubar :model="items" class="app-menubar">
+  <div class="min-h-screen flex flex-col font-sans bg-gray-900">
+    <Menubar :model="items" class="!bg-gray-800 !border-none rounded-none px-4 py-2">
+      <!-- Левая часть: логотип -->
       <template #start>
-        <div class="logo-container">
-          <router-link to="/" class="logo">
-            <i class="pi pi-building"></i>
+        <div class="flex items-center">
+          <router-link to="/" class="flex items-center gap-2 text-white font-bold text-lg no-underline hover:opacity-90">
+            <i class="pi pi-building text-xl"></i>
             <span>Coworking Booking</span>
-          </router-link>
-        </div>
+          </router-link>        </div>
       </template>
 
-      <template #item="{ item, props }">
+      <template #item="{ item }">
         <router-link 
           v-if="item.route" 
           :to="item.route" 
-          class="p-menubar-item-link"
+          class="flex items-center gap-2 text-white px-3 py-2 rounded-md no-underline hover:bg-white/20"
+          active-class="bg-white/30 font-bold"
         >
           <i :class="item.icon"></i>
           <span>{{ item.label }}</span>
         </router-link>
-        <a 
-          v-else 
-          :href="item.url" 
-          class="p-menubar-item-link"
-        >
-          <i :class="item.icon"></i>
-          <span>{{ item.label }}</span>
-        </a>
       </template>
 
       <template #end>
-        <div class="auth-section">
-          <div v-if="isAuthenticated && user" class="user-info">
-            <i class="pi pi-user"></i>
-            <span class="user-name">{{ user.name }}</span>
+        <div class="flex items-center">
+          <div v-if="isAuthenticated && user" class="flex items-center gap-3">
+            <i class="pi pi-user text-white"></i>
+            <span class="text-white font-medium">{{ user.name }}</span>
             <Button 
               @click="logout" 
               label="Выйти" 
               icon="pi pi-sign-out" 
+              variant="text"
+              class="!text-white hover:!bg-white/20"
             />
           </div>
-          <div v-else class="login-form">
-            <form @submit.prevent="login" class="auth-form">
+          
+          <div v-else class="bg-white/10 rounded-md p-2">
+            <form @submit.prevent="login" class="flex flex-row gap-2">
               <InputText 
                 v-model="email" 
                 type="email" 
                 placeholder="email"
+                class="!px-2 !py-1 !rounded !border !border-gray-600 !bg-gray-700 !text-white"
                 required 
               />
               <InputText 
                 v-model="password" 
                 type="password" 
                 placeholder="Пароль"
+                class="!px-2 !py-1 !rounded !border !border-gray-600 !bg-gray-700 !text-white"
                 required 
               />
               <Button 
                 type="submit" 
                 label="Войти" 
                 icon="pi pi-sign-in"
+                class="!bg-blue-500 !border-none !text-white !px-3 !py-1 hover:!bg-blue-600"
               />
-              <div> <small v-if="authError" class="error">{{ authError }}</small></div>
+              <div v-if="authError">
+                <small class="!text-red-400">{{ authError }}</small>
+              </div>
             </form>
           </div>
         </div>
       </template>
     </Menubar>
     
-    <main class="main-content">
+    <main class="flex-1 p-4 bg-gray-900">
       <router-view></router-view>
     </main>
   </div>
@@ -93,29 +94,29 @@ export default {
       password: '',
       authStore: useAuthStore(),
       items: [
-      {
-        label: 'Бронирования',
-        icon: 'pi pi-calendar',
-        route: '/bookings'
-      },
-      {
-        label: 'Коворкинги',
-        icon: 'pi pi-building',
-        route: '/kovorkings'
-      },
-      {
-        label: 'Пользователи',
-        icon: 'pi pi-users',
-        route: '/users'
-      },
-      {
-        label: 'Адреса',
-        icon: 'pi pi-map-marker',
-        route: '/buildings'
-      }
-    ]
-  };
-},
+        {
+          label: 'Бронирования',
+          icon: 'pi pi-calendar',
+          route: '/bookings'
+        },
+        {
+          label: 'Коворкинги',
+          icon: 'pi pi-building',
+          route: '/kovorkings'
+        },
+        {
+          label: 'Пользователи',
+          icon: 'pi pi-users',
+          route: '/users'
+        },
+        {
+          label: 'Адреса',
+          icon: 'pi pi-map-marker',
+          route: '/buildings'
+        }
+      ]
+    };
+  },
   
   computed: {
     isAuthenticated() {
@@ -147,141 +148,3 @@ export default {
   },
 };
 </script>
-
-<style scoped>
-* {
-  box-sizing: border-box;
-}
-
-.app-container {
-  font-family: Arial, sans-serif;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.app-header {
-  background-color: #2c3e50;
-  color: white;
-  padding: 1rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.logo a {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  text-decoration: none;
-  color: white;
-  font-weight: bold;
-  font-size: 1.2rem;
-}
-
-.nav-menu {
-  display: flex;
-  list-style: none;
-  gap: 1rem;
-  margin: 0;
-  padding: 0;
-}
-
-.nav-link {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  text-decoration: none;
-  color: white;
-  padding: 0.3rem 0.5rem;
-  border-radius: 4px;
-}
-
-.nav-link:hover {
-  background-color: rgba(255,255,255,0.2);
-}
-
-.router-link-active {
-  background-color: rgba(255,255,255,0.3);
-  font-weight: bold;
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.logout-btn {
-  background: none;
-  border: 1px solid white;
-  color: white;
-  padding: 0.3rem 0.6rem;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.logout-btn:hover {
-  background-color: rgba(255,255,255,0.2);
-}
-
-.login-form {
-  background-color: rgba(255,255,255,0.1);
-  padding: 0.5rem;
-  border-radius: 4px;
-}
-
-.auth-form {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.auth-form input {
-  padding: 0.3rem 0.5rem;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-}
-
-.auth-form button {
-  background-color: #3498db;
-  border: none;
-  color: white;
-  padding: 0.3rem 0.8rem;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.auth-form button:hover {
-  background-color: #2980b9;
-}
-
-.error {
-  color: #e74c3c;
-  margin: 0;
-  font-size: 0.9rem;
-}
-
-.main-content {
-  flex: 1;
-  padding: 1rem;
-  background-color: #ecf0f1;
-}
-
-@media (max-width: 768px) {
-  .app-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .nav-menu {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .auth-form {
-    justify-content: center;
-  }
-}
-</style>
