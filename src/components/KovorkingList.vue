@@ -5,37 +5,41 @@
     <div v-if="loading" class="loading">Загрузка...</div>
     <div v-if="error" class="error">{{ error }}</div>
     
-    <table v-if="!loading && kovorkings.length" class="kovorkings-table">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Название</th>
-          <th>Здание</th>
-          <th>Этаж</th>
-          <th>Вместимость</th>
-          <th>Время работы</th>
-          <th>Тип</th>
-          <th>Часовой пояс</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr 
-          v-for="kovorking in kovorkings" 
-          :key="kovorking.id"
-          @click="selectKovorking(kovorking)"
-          class="clickable-row"
-        >
-          <td>{{ kovorking.id }}</td>
-          <td>{{ kovorking.name }}</td>
-          <td>{{ kovorking.building?.name || '—' }}</td>
-          <td>{{ kovorking.floor_number || '—' }}</td>
-          <td>{{ kovorking.capacity || '—' }} чел.</td>
-          <td>{{ kovorking.from_at || '—' }} - {{ kovorking.to_at || '—' }}</td>
-          <td>{{ kovorking.type_id || '—' }}</td>
-          <td>{{ kovorking.timezone || '—' }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <DataTable
+      v-if="!loading && kovorkings.length"
+      :value="kovorkings"
+      :lazy="true"
+      :loading="loading"
+      :paginator="true"
+      :rows="perpage"
+      :rowsPerPageOptions="[2, 5, 10]"
+      :totalRecords="kovorkings_total"
+      @page="onPageChange"
+      responsive-layout="scroll"
+      :first="offset"
+      data-key="id"
+      class="kovorkings-table"
+    >
+      <Column field="id" header="ID" style="width: 80px" />
+      <Column field="name" header="Название" />
+      <Column field="building.name" header="Здание" />
+      <Column field="floor_number" header="Этаж" />
+      <Column field="capacity" header="Вместимость">
+        <template #body="{ data }">
+          {{ data.capacity || '—' }} чел.
+        </template>
+      </Column>
+      <Column field="from_at" header="Время работы">
+        <template #body="{ data }">
+          {{ data.from_at || '—' }} - {{ data.to_at || '—' }}
+        </template>
+      </Column>
+     
+      <Column header="Действия" style="width: 100px">
+        <template #body="{ data }">
+        </template>
+      </Column>
+    </DataTable>
     
     <div v-else-if="!loading && !kovorkings.length" class="empty">
       Нет доступных коворкингов
@@ -45,30 +49,74 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
 import { useRouter } from 'vue-router'
+import DataTable from 'primevue/datatable'
+import Column from 'primevue/column'
+import Button from 'primevue/button'
+import axios from 'axios'
 
-const backendUrl = import.meta.env.VITE_API_URL || import.meta.env.VUE_APP_BACKEND_URL || 'http://127.0.0.1:8000/api'
+const backendUrl = import.meta.env.VITE_API_URL
 axios.defaults.baseURL = backendUrl
 
 const router = useRouter()
 const kovorkings = ref([])
+const kovorkings_total = ref(0)
 const loading = ref(false)
 const error = ref(null)
+const perpage = ref(10)
+const offset = ref(0)
 
-const fetchKovorkings = async () => {
+const fetchKovorkings = async (page = 1, perPage = 10) => {
   loading.value = true
   error.value = null
   
   try {
-    const response = await axios.get('/kovorkings')
-    kovorkings.value = response.data.data || response.data
+    const response = await axios.get('/kovorkings', {
+      params: {
+        page: page,
+        perpage: perPage
+      }
+    })
+    
+    console.log('Kovorkings API Response:', response.data)
+    
+    if (response.data && response.data.data) {
+      kovorkings.value = response.data.data
+      kovorkings_total.value = response.data.total || response.data.data.length
+    } else if (Array.isArray(response.data)) {
+      kovorkings.value = response.data
+      kovorkings_total.value = response.data.length
+    } else {
+      kovorkings.value = []
+      kovorkings_total.value = 0
+    }
   } catch (err) {
     error.value = 'Ошибка при загрузке коворкингов'
     console.error(err)
+    kovorkings.value = []
+    kovorkings_total.value = 0
   } finally {
     loading.value = false
   }
+}
+
+const fetchKovorkingsTotal = async () => {
+  try {
+    const response = await axios.get('/kovorkings_total')
+    kovorkings_total.value = typeof response.data === 'number' 
+      ? response.data 
+      : (response.data.total || 0)
+  } catch (err) {
+    console.error('Error fetching total:', err)
+    kovorkings_total.value = 0
+  }
+}
+
+const onPageChange = (event) => {
+  offset.value = event.first
+  perpage.value = event.rows
+  const page = event.first / event.rows + 1
+  fetchKovorkings(page, event.rows)
 }
 
 const selectKovorking = (kovorking) => {
@@ -76,85 +124,10 @@ const selectKovorking = (kovorking) => {
 }
 
 onMounted(() => {
-  fetchKovorkings()
+  fetchKovorkings(1, perpage.value)
+  fetchKovorkingsTotal()
 })
 </script>
 
 <style scoped>
-.kovorkings-list {
-  padding: 20px;
-  font-family: Arial, sans-serif;
-  background-color: #1a1a1a;
-  min-height: 100vh;
-  color: #ffffff;
-}
-
-.kovorkings-list h2 {
-  color: #ffffff;
-  margin-bottom: 20px;
-}
-
-.kovorkings-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 20px;
-  background-color: #000000;
-  border: 1px solid #333333;
-}
-
-.kovorkings-table th,
-.kovorkings-table td {
-  border: 1px solid #333333;
-  padding: 12px 8px;
-  text-align: left;
-  color: #ffffff;
-}
-
-.kovorkings-table th {
-  background-color: #000000;
-  font-weight: bold;
-  color: #ffffff;
-  border-bottom: 2px solid #444444;
-}
-
-.kovorkings-table td {
-  background-color: #000000;
-  color: #ffffff;
-}
-
-.kovorkings-table tr:nth-child(even) td {
-  background-color: #0a0a0a;
-}
-
-.kovorkings-table tr:hover td {
-  background-color: #1a1a1a;
-}
-
-.clickable-row {
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.loading {
-  padding: 20px;
-  text-align: center;
-  font-size: 16px;
-  color: #ffffff;
-}
-
-.error {
-  padding: 20px;
-  text-align: center;
-  font-size: 16px;
-  color: #ff6b6b;
-  background-color: rgba(255, 107, 107, 0.1);
-  border-radius: 4px;
-}
-
-.empty {
-  padding: 40px;
-  text-align: center;
-  font-size: 16px;
-  color: #999999;
-}
 </style>
