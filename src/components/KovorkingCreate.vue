@@ -58,14 +58,12 @@
       </div>
 
       <div class="actions">
-        <button type="button" class="cancel-btn" @click="cancel">Отмена</button>
+        <button type="button" class="cancel-btn" @click="$router.push('/kovorkings')">Отмена</button>
         <button type="submit" class="submit-btn" :disabled="submitting">
           {{ submitting ? 'Сохранение...' : 'Создать' }}
         </button>
       </div>
     </form>
-
-    <Toast />
   </div>
 </template>
 
@@ -73,14 +71,11 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-import Toast from 'primevue/toast'
-import { useToast } from 'primevue/usetoast'
 
 const backendUrl = import.meta.env.VITE_API_URL
 axios.defaults.baseURL = backendUrl
 
 const router = useRouter()
-const toast = useToast()
 
 const buildings = ref([])
 const loadingBuildings = ref(false)
@@ -115,14 +110,6 @@ const loadBuildings = async () => {
 const onFileChange = (e) => {
   const file = e.target.files[0]
   if (file) {
-    if (file.size > 2 * 1024 * 1024) {
-      error.value = 'Размер файла не должен превышать 2MB'
-      return
-    }
-    if (!file.type.startsWith('image/')) {
-      error.value = 'Пожалуйста, выберите изображение'
-      return
-    }
     form.value.image = file
     const reader = new FileReader()
     reader.onload = (ev) => { imagePreview.value = ev.target.result }
@@ -139,18 +126,9 @@ const removeImage = () => {
   document.querySelector('input[type="file"]').value = ''
 }
 
-const cancel = () => {
-  router.push('/kovorkings')
-}
 const submitForm = async () => {
-  if (!form.value.name) {
+  if (!form.value.name ) {
     error.value = 'Заполните название'
-    toast.add({
-      severity: 'warn',
-      summary: 'Ошибка валидации',
-      detail: 'Заполните название',
-      life: 4000
-    })
     return
   }
 
@@ -169,56 +147,24 @@ const submitForm = async () => {
 
   try {
     const token = localStorage.getItem('token')
-    const response = await axios.post('/kovorkings', fd, {
+    await axios.post('/kovorkings', fd, {
       headers: {
         'Content-Type': 'multipart/form-data',
         'Authorization': `Bearer ${token}`
       }
     })
-
-    // ✅ Проверяем код из ответа
-    if (response.data.code === 0) {
-      toast.add({
-        severity: 'success',
-        summary: 'Успешно',
-        detail: response.data.message || 'Коворкинг успешно создан!',
-        life: 3000
-      })
-      setTimeout(() => router.push('/kovorkings'), 1500)
-    } else {
-      // Сервер вернул ошибку (code !== 0) с HTTP 200
-      let errorMsg = response.data.message || 'Неизвестная ошибка'
-      if (response.data.code === 2) {
-        errorMsg = 'Ошибка загрузки изображения: ' + errorMsg
-      }
-      error.value = errorMsg
-      toast.add({
-        severity: 'error',
-        summary: 'Ошибка',
-        detail: errorMsg,
-        life: 5000
-      })
-    }
+    router.push('/kovorkings')
   } catch (err) {
-    // Ошибка сети или HTTP статус 4xx/5xx
-    const responseData = err.response?.data
-    let errorMsg = responseData?.message || err.message || 'Ошибка создания коворкинга'
-
-    if (responseData?.code === 2) {
-      errorMsg = 'Ошибка загрузки изображения: ' + errorMsg
-    }
-    error.value = errorMsg
-    toast.add({
-      severity: 'error',
-      summary: 'Ошибка',
-      detail: errorMsg,
-      life: 5000
-    })
-    console.error('Ошибка создания:', err)
+    error.value = err.response?.data?.message || 'Ошибка создания'
+    console.error(err)
   } finally {
     submitting.value = false
   }
 }
+
+onMounted(() => {
+  loadBuildings()
+})
 </script>
 
 <style scoped>

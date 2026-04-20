@@ -1,12 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import BookingsList from './components/BookingsList.vue'
 import KovorkingsList from './components/KovorkingList.vue'
+import KovorkingCreate from './components/KovorkingCreate.vue'
+import KovorkingEdit from './components/KovorkingEdit.vue'
 import BuildingDetail from './components/BuildingDetail.vue'
 import UserList from './components/UserList.vue'
 import UserDetail from './components/UserDetail.vue'
 import BuildingList from './components/BuildingList.vue' 
 import BuildingEdit from './components/BuildingEdit.vue'
-import HomePage from '@/components/HomePage.vue'; 
+import HomePage from '@/components/HomePage.vue'
+
 const routes = [
   {
     path: '/',
@@ -17,6 +20,16 @@ const routes = [
     path: '/bookings',
     name: 'bookings',
     component: BookingsList
+  },
+  {
+    path: '/kovorkings/create',
+    name: 'kovorkingCreate',
+    component: KovorkingCreate
+  },
+  {
+    path: '/kovorkings/edit/:id',
+    name: 'kovorkingEdit',
+    component: KovorkingEdit
   },
   {
     path: '/kovorkings',
@@ -38,7 +51,6 @@ const routes = [
     name: 'users',
     component: UserList
   },
-  
   {
     path: '/user/:id',
     name: 'user-detail',
@@ -46,7 +58,7 @@ const routes = [
   },
   {
     path: '/buildings/:id/edit',
-    name: 'user-detail',
+    name: 'building-edit',     
     component: BuildingEdit
   }
 ]

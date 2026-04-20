@@ -12,6 +12,7 @@ export const useDataStore = defineStore('data', {
         kovorkings: [],
         kovorkings_total: 0,
         errorMessage: "",
+        errorCode: ""
     }),
     
     actions: {
@@ -152,5 +153,50 @@ export const useDataStore = defineStore('data', {
                 this.kovorkings_total = 0;
             }
         },
+        async create_kovorking(formData) {
+            this.errorMessage = "";
+            this.errorCode = null;
+            
+            try {
+                const token = localStorage.getItem('token');
+                
+                const response = await axios.post(`${backendUrl}/kovorkings`, formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                this.errorCode = response.data.code;
+                this.errorMessage = response.data.message;
+                
+                if (response.data.code === 0) {
+                    await this.get_kovorkings();
+                    await this.get_kovorkings_total();
+                }
+                
+                return response.data;
+                
+            } catch (error) {
+                if (error.response) {
+                    this.errorCode = error.response.data.code || 11;
+                    this.errorMessage = error.response.data.message || error.response.statusText;
+                    console.error('Response error:', error.response.status, error.response.data);
+                } else if (error.request) {
+                    this.errorCode = 12;
+                    this.errorMessage = 'No response from server';
+                    console.error('Request error:', error.request);
+                } else {
+                    this.errorCode = 13;
+                    this.errorMessage = error.message;
+                    console.error('Error:', error.message);
+                }
+                
+                return {
+                    code: this.errorCode,
+                    message: this.errorMessage
+                };
+            }
+        }
     }
 });

@@ -1,11 +1,11 @@
 <template>
-  <div class="kovorking-create-dark">
-    <h2>Создание коворкинга</h2>
+  <div class="kovorking-edit-dark">
+    <h2>Редактирование коворкинга</h2>
 
-    <div v-if="loadingBuildings" class="info">Загрузка списка зданий...</div>
+    <div v-if="loading" class="info">Загрузка данных...</div>
     <div v-if="error" class="error">{{ error }}</div>
 
-    <form @submit.prevent="submitForm" class="simple-form">
+    <form @submit.prevent="submitForm" class="simple-form" v-if="!loading">
       <div class="form-group">
         <label>Название *</label>
         <input v-model="form.name" type="text" required />
@@ -48,8 +48,16 @@
         <textarea v-model="form.description" rows="3"></textarea>
       </div>
 
+      <!-- Текущее изображение -->
+      <div class="form-group" v-if="kovorking?.picture_url">
+        <label>Текущее изображение</label>
+        <div class="current-image">
+          <img :src="kovorking.picture_url" width="120" />
+        </div>
+      </div>
+
       <div class="form-group">
-        <label>Изображение</label>
+        <label>Новое изображение (опционально)</label>
         <input type="file" @change="onFileChange" accept="image/*" />
         <div v-if="imagePreview" class="preview">
           <img :src="imagePreview" width="100" />
@@ -58,34 +66,32 @@
       </div>
 
       <div class="actions">
-        <button type="button" class="cancel-btn" @click="cancel">Отмена</button>
+        <button type="button" class="cancel-btn" @click="$router.push('/kovorkings')">Отмена</button>
         <button type="submit" class="submit-btn" :disabled="submitting">
-          {{ submitting ? 'Сохранение...' : 'Создать' }}
+          {{ submitting ? 'Сохранение...' : 'Сохранить' }}
         </button>
       </div>
     </form>
-
-    <Toast />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
-import Toast from 'primevue/toast'
-import { useToast } from 'primevue/usetoast'
 
 const backendUrl = import.meta.env.VITE_API_URL
 axios.defaults.baseURL = backendUrl
 
 const router = useRouter()
-const toast = useToast()
+const route = useRoute()
+const kovorkingId = route.params.id
 
-const buildings = ref([])
-const loadingBuildings = ref(false)
+const loading = ref(false)
 const error = ref(null)
 const submitting = ref(false)
+const buildings = ref([])
+const kovorking = ref(null)
 const imagePreview = ref(null)
 
 const form = ref({
@@ -99,24 +105,54 @@ const form = ref({
   image: null
 })
 
+// Загрузка списка зданий
 const loadBuildings = async () => {
-  loadingBuildings.value = true
   try {
     const res = await axios.get('/buildings')
     buildings.value = res.data.data || res.data || []
   } catch (err) {
-    error.value = 'Не удалось загрузить здания'
-    console.error(err)
-  } finally {
-    loadingBuildings.value = false
+    console.error('Ошибка загрузки зданий', err)
   }
 }
 
+// Загрузка данных редактируемого коворкинга
+const loadKovorking = async () => {
+  loading.value = true
+  try {
+    const res = await axios.get(`/kovorking/${kovorkingId}`)
+    kovorking.value = res.data
+
+    // Преобразование времени из "HH:MM:SS" в "HH:MM" для input type="time"
+    const formatTime = (timeStr) => {
+      if (!timeStr) return null
+      const parts = timeStr.split(':')
+      return `${parts[0]}:${parts[1]}`
+    }
+
+    form.value = {
+      name: kovorking.value.name || '',
+      building_id: kovorking.value.building_id || null,
+      floor_number: kovorking.value.floor_number || null,
+      capacity: kovorking.value.capacity || null,
+      from_at: formatTime(kovorking.value.from_at),
+      to_at: formatTime(kovorking.value.to_at),
+      description: kovorking.value.description || '',
+      image: null
+    }
+  } catch (err) {
+    error.value = 'Не удалось загрузить данные коворкинга'
+    console.error(err)
+  } finally {
+    loading.value = false
+  }
+}
+
+// Обработка выбора файла (новое изображение)
 const onFileChange = (e) => {
   const file = e.target.files[0]
   if (file) {
-    if (file.size > 2 * 1024 * 1024) {
-      error.value = 'Размер файла не должен превышать 2MB'
+    if (file.size > 20 * 1024 * 1024) {
+      error.value = 'Размер файла не должен превышать 20MB'
       return
     }
     if (!file.type.startsWith('image/')) {
@@ -139,18 +175,10 @@ const removeImage = () => {
   document.querySelector('input[type="file"]').value = ''
 }
 
-const cancel = () => {
-  router.push('/kovorkings')
-}
+// Отправка формы (PUT)
 const submitForm = async () => {
-  if (!form.value.name) {
+  if (!form.value.name ) {
     error.value = 'Заполните название'
-    toast.add({
-      severity: 'warn',
-      summary: 'Ошибка валидации',
-      detail: 'Заполните название',
-      life: 4000
-    })
     return
   }
 
@@ -166,64 +194,34 @@ const submitForm = async () => {
   if (form.value.to_at) fd.append('to_at', form.value.to_at)
   if (form.value.description) fd.append('description', form.value.description)
   if (form.value.image) fd.append('image', form.value.image)
+  fd.append('_method', 'PUT')   // Laravel spoofing
 
   try {
     const token = localStorage.getItem('token')
-    const response = await axios.post('/kovorkings', fd, {
+    await axios.post(`/kovorkings/${kovorkingId}`, fd, {
       headers: {
         'Content-Type': 'multipart/form-data',
         'Authorization': `Bearer ${token}`
       }
     })
-
-    // ✅ Проверяем код из ответа
-    if (response.data.code === 0) {
-      toast.add({
-        severity: 'success',
-        summary: 'Успешно',
-        detail: response.data.message || 'Коворкинг успешно создан!',
-        life: 3000
-      })
-      setTimeout(() => router.push('/kovorkings'), 1500)
-    } else {
-      // Сервер вернул ошибку (code !== 0) с HTTP 200
-      let errorMsg = response.data.message || 'Неизвестная ошибка'
-      if (response.data.code === 2) {
-        errorMsg = 'Ошибка загрузки изображения: ' + errorMsg
-      }
-      error.value = errorMsg
-      toast.add({
-        severity: 'error',
-        summary: 'Ошибка',
-        detail: errorMsg,
-        life: 5000
-      })
-    }
+    router.push('/kovorkings')
   } catch (err) {
-    // Ошибка сети или HTTP статус 4xx/5xx
-    const responseData = err.response?.data
-    let errorMsg = responseData?.message || err.message || 'Ошибка создания коворкинга'
-
-    if (responseData?.code === 2) {
-      errorMsg = 'Ошибка загрузки изображения: ' + errorMsg
-    }
-    error.value = errorMsg
-    toast.add({
-      severity: 'error',
-      summary: 'Ошибка',
-      detail: errorMsg,
-      life: 5000
-    })
-    console.error('Ошибка создания:', err)
+    error.value = err.response?.data?.message || 'Ошибка обновления'
+    console.error(err)
   } finally {
     submitting.value = false
   }
 }
+
+onMounted(() => {
+  loadBuildings()
+  loadKovorking()
+})
 </script>
 
 <style scoped>
-/* Тёмная тема, приближенная к PrimeVue Dark */
-.kovorking-create-dark {
+/* Тёмная тема – полностью как в Create */
+.kovorking-edit-dark {
   max-width: 700px;
   margin: 20px auto;
   background: #1e1e2f;
@@ -340,7 +338,7 @@ button:active {
   background: #b71c1c;
 }
 
-.preview {
+.current-image, .preview {
   margin-top: 12px;
   display: flex;
   align-items: center;
@@ -351,7 +349,7 @@ button:active {
   display: inline-flex;
 }
 
-.preview img {
+.current-image img, .preview img {
   border-radius: 6px;
   border: 1px solid #4a4a5a;
 }
@@ -371,9 +369,8 @@ button:active {
   margin-bottom: 16px;
 }
 
-/* Адаптив */
 @media (max-width: 640px) {
-  .kovorking-create-dark {
+  .kovorking-edit-dark {
     margin: 10px;
     padding: 16px;
   }
