@@ -3,7 +3,17 @@
     <h2>Создание коворкинга</h2>
 
     <div v-if="loadingBuildings" class="info">Загрузка списка зданий...</div>
-    <div v-if="error" class="error">{{ error }}</div>
+    
+    <div v-if="error" class="error">
+      <strong>Ошибка:</strong> {{ error }}
+    </div>
+    
+    <div v-if="serverErrors.length" class="error-list">
+      <strong>Не удалось создать коворкинг:</strong>
+      <ul>
+        <li v-for="(err, idx) in serverErrors" :key="idx">{{ err }}</li>
+      </ul>
+    </div>
 
     <form @submit.prevent="submitForm" class="simple-form">
       <div class="form-group">
@@ -58,12 +68,18 @@
       </div>
 
       <div class="actions">
-        <button type="button" class="cancel-btn" @click="$router.push('/kovorkings')">Отмена</button>
+        <button type="button" class="cancel-btn" @click="cancel">Отмена</button>
         <button type="submit" class="submit-btn" :disabled="submitting">
           {{ submitting ? 'Сохранение...' : 'Создать' }}
         </button>
       </div>
     </form>
+    
+    <!-- Блок результата создания (без перехода) -->
+    <div v-if="createSuccess" class="success">
+      Коворкинг "{{ createdKovorkingName }}" успешно создан!
+      <button class="success-btn" @click="resetForm">Создать ещё</button>
+    </div>
   </div>
 </template>
 
@@ -80,8 +96,11 @@ const router = useRouter()
 const buildings = ref([])
 const loadingBuildings = ref(false)
 const error = ref(null)
+const serverErrors = ref([])
 const submitting = ref(false)
 const imagePreview = ref(null)
+const createSuccess = ref(false)
+const createdKovorkingName = ref('')
 
 const form = ref({
   name: '',
@@ -123,17 +142,50 @@ const onFileChange = (e) => {
 const removeImage = () => {
   form.value.image = null
   imagePreview.value = null
-  document.querySelector('input[type="file"]').value = ''
+  const fileInput = document.querySelector('input[type="file"]')
+  if (fileInput) fileInput.value = ''
+}
+
+const resetForm = () => {
+  createSuccess.value = false
+  createdKovorkingName.value = ''
+  form.value = {
+    name: '',
+    building_id: null,
+    floor_number: null,
+    capacity: null,
+    from_at: null,
+    to_at: null,
+    description: '',
+    image: null
+  }
+  imagePreview.value = null
+  const fileInput = document.querySelector('input[type="file"]')
+  if (fileInput) fileInput.value = ''
+  serverErrors.value = []
+  error.value = null
+}
+
+const cancel = () => {
+  router.push('/kovorkings')
 }
 
 const submitForm = async () => {
-  if (!form.value.name ) {
+  // Валидация
+  if (!form.value.name) {
     error.value = 'Заполните название'
+    return
+  }
+  
+  if (!form.value.building_id) {
+    error.value = 'Выберите здание'
     return
   }
 
   submitting.value = true
   error.value = null
+  serverErrors.value = []
+  createSuccess.value = false
 
   const fd = new FormData()
   fd.append('name', form.value.name)
@@ -147,16 +199,61 @@ const submitForm = async () => {
 
   try {
     const token = localStorage.getItem('token')
-    await axios.post('/kovorkings', fd, {
+    const response = await axios.post('/kovorkings', fd, {
       headers: {
         'Content-Type': 'multipart/form-data',
         'Authorization': `Bearer ${token}`
       }
     })
-    router.push('/kovorkings')
+    
+    createSuccess.value = true
+    createdKovorkingName.value = form.value.name
+    
+    form.value = {
+      name: '',
+      building_id: null,
+      floor_number: null,
+      capacity: null,
+      from_at: null,
+      to_at: null,
+      description: '',
+      image: null
+    }
+    imagePreview.value = null
+    const fileInput = document.querySelector('input[type="file"]')
+    if (fileInput) fileInput.value = ''
+    
   } catch (err) {
-    error.value = err.response?.data?.message || 'Ошибка создания'
-    console.error(err)
+    console.error('Create error:', err)
+    
+    if (err.response?.data) {
+      const data = err.response.data
+      
+      if (data.errors && typeof data.errors === 'object') {
+        const errors = []
+        for (const field in data.errors) {
+          if (Array.isArray(data.errors[field])) {
+            errors.push(`${field}: ${data.errors[field].join(', ')}`)
+          } else {
+            errors.push(`${field}: ${data.errors[field]}`)
+          }
+        }
+        serverErrors.value = errors
+      } 
+      else if (data.message) {
+        error.value = data.message
+      }
+      else if (typeof data === 'string') {
+        error.value = data
+      }
+      else {
+        error.value = 'Ошибка создания коворкинга'
+      }
+    } else if (err.message) {
+      error.value = err.message
+    } else {
+      error.value = 'Неизвестная ошибка'
+    }
   } finally {
     submitting.value = false
   }
@@ -168,7 +265,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Тёмная тема, приближенная к PrimeVue Dark */
 .kovorking-create-dark {
   max-width: 700px;
   margin: 20px auto;
@@ -311,13 +407,55 @@ button:active {
   border-left: 4px solid #f44336;
 }
 
+.error-list {
+  color: #ff8a80;
+  background: #3a1a1a;
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border-left: 4px solid #f44336;
+}
+
+.error-list ul {
+  margin: 8px 0 0 20px;
+  padding: 0;
+}
+
+.error-list li {
+  margin: 4px 0;
+}
+
+.success {
+  color: #a5d6a7;
+  background: #1a3a1a;
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 20px;
+  border-left: 4px solid #4caf50;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.success-btn {
+  background: #4caf50;
+  color: white;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.success-btn:hover {
+  background: #388e3c;
+}
+
 .info {
   color: #b0b0b0;
   font-style: italic;
   margin-bottom: 16px;
 }
 
-/* Адаптив */
 @media (max-width: 640px) {
   .kovorking-create-dark {
     margin: 10px;

@@ -1,385 +1,266 @@
 <template>
-  <div class="kovorking-create-dark">
-    <h2>Создание коворкинга</h2>
-
-    <div v-if="loadingBuildings" class="info">Загрузка списка зданий...</div>
+  <div class="kovorkings-list">
+    <div class="header">
+      <h2>Коворкинги</h2>
+      <Button 
+        label="Создать коворкинг" 
+        icon="pi pi-plus" 
+        @click="goToCreate"
+        class="p-button-primary"
+      />
+    </div>
+    
+    <div v-if="loading" class="loading">Загрузка...</div>
     <div v-if="error" class="error">{{ error }}</div>
-
-    <form @submit.prevent="submitForm" class="simple-form">
-      <div class="form-group">
-        <label>Название *</label>
-        <input v-model="form.name" type="text" required />
-      </div>
-
-      <div class="form-group">
-        <label>Здание *</label>
-        <select v-model="form.building_id" required>
-          <option :value="null">-- Выберите здание --</option>
-          <option v-for="b in buildings" :key="b.id" :value="b.id">
-            {{ b.name }}
-          </option>
-        </select>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label>Этаж</label>
-          <input v-model.number="form.floor_number" type="number" />
-        </div>
-        <div class="form-group">
-          <label>Вместимость (чел)</label>
-          <input v-model.number="form.capacity" type="number" />
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label>Время открытия</label>
-          <input v-model="form.from_at" type="time" />
-        </div>
-        <div class="form-group">
-          <label>Время закрытия</label>
-          <input v-model="form.to_at" type="time" />
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label>Описание</label>
-        <textarea v-model="form.description" rows="3"></textarea>
-      </div>
-
-      <div class="form-group">
-        <label>Изображение</label>
-        <input type="file" @change="onFileChange" accept="image/*" />
-        <div v-if="imagePreview" class="preview">
-          <img :src="imagePreview" width="100" />
-          <button type="button" class="remove-btn" @click="removeImage">🗑️</button>
-        </div>
-      </div>
-
-      <div class="actions">
-        <button type="button" class="cancel-btn" @click="cancel">Отмена</button>
-        <button type="submit" class="submit-btn" :disabled="submitting">
-          {{ submitting ? 'Сохранение...' : 'Создать' }}
-        </button>
-      </div>
-    </form>
-
-    <Toast />
+    
+    <DataTable
+      v-if="!loading && kovorkings.length"
+      :value="kovorkings"
+      :lazy="true"
+      :paginator="true"
+      :rows="perpage"
+      :rowsPerPageOptions="[2, 5, 10]"
+      :totalRecords="kovorkings_total"
+      @page="onPageChange"
+      :first="offset"
+      data-key="id"
+      class="kovorkings-table"
+    >
+      <Column field="id" header="ID" style="width: 80px" />
+      
+      <!-- Новый столбец с изображением -->
+      <Column field="picture_url" header="Изображение" style="width: 80px">
+        <template #body="{ data }">
+          <img 
+            v-if="data.picture_url" 
+            :src="data.picture_url" 
+            class="preview-img" 
+            alt="коворкинг"
+          />
+          <span v-else class="no-img">—</span>
+        </template>
+      </Column>
+      
+      <Column field="name" header="Название" />
+      <Column field="building.name" header="Здание" />
+      <Column field="floor_number" header="Этаж" />
+      <Column field="capacity" header="Вместимость">
+        <template #body="{ data }">
+          {{ data.capacity || '—' }} чел.
+        </template>
+      </Column>
+      <Column field="from_at" header="Время работы">
+        <template #body="{ data }">
+          {{ data.from_at || '—' }} - {{ data.to_at || '—' }}
+        </template>
+      </Column>
+     
+      <Column header="Действия" style="width: 120px">
+        <template #body="{ data }">
+          <Button 
+            icon="pi pi-pencil" 
+            class="p-button-rounded p-button-text p-button-info" 
+            @click="editKovorking(data.id)"
+          />
+          <Button 
+            icon="pi pi-trash" 
+            class="p-button-rounded p-button-text p-button-danger" 
+            @click="deleteKovorking(data.id)"
+          />
+        </template>
+      </Column>
+    </DataTable>
+    
+    <div v-else-if="!loading && !kovorkings.length" class="empty">
+      <i class="pi pi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+      <p>Нет доступных коворкингов</p>
+      <Button 
+        label="Создать первый коворкинг" 
+        icon="pi pi-plus" 
+        @click="goToCreate"
+        class="p-button-primary p-button-outlined"
+      />
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import DataTable from 'primevue/datatable'
+import Column from 'primevue/column'
+import Button from 'primevue/button'
 import axios from 'axios'
-import Toast from 'primevue/toast'
-import { useToast } from 'primevue/usetoast'
 
 const backendUrl = import.meta.env.VITE_API_URL
 axios.defaults.baseURL = backendUrl
 
 const router = useRouter()
-const toast = useToast()
-
-const buildings = ref([])
-const loadingBuildings = ref(false)
+const kovorkings = ref([])
+const kovorkings_total = ref(0)
+const loading = ref(false)
 const error = ref(null)
-const submitting = ref(false)
-const imagePreview = ref(null)
+const perpage = ref(10)
+const offset = ref(0)
 
-const form = ref({
-  name: '',
-  building_id: null,
-  floor_number: null,
-  capacity: null,
-  from_at: null,
-  to_at: null,
-  description: '',
-  image: null
-})
-
-const loadBuildings = async () => {
-  loadingBuildings.value = true
-  try {
-    const res = await axios.get('/buildings')
-    buildings.value = res.data.data || res.data || []
-  } catch (err) {
-    error.value = 'Не удалось загрузить здания'
-    console.error(err)
-  } finally {
-    loadingBuildings.value = false
-  }
-}
-
-const onFileChange = (e) => {
-  const file = e.target.files[0]
-  if (file) {
-    if (file.size > 2 * 1024 * 1024) {
-      error.value = 'Размер файла не должен превышать 2MB'
-      return
-    }
-    if (!file.type.startsWith('image/')) {
-      error.value = 'Пожалуйста, выберите изображение'
-      return
-    }
-    form.value.image = file
-    const reader = new FileReader()
-    reader.onload = (ev) => { imagePreview.value = ev.target.result }
-    reader.readAsDataURL(file)
-  } else {
-    form.value.image = null
-    imagePreview.value = null
-  }
-}
-
-const removeImage = () => {
-  form.value.image = null
-  imagePreview.value = null
-  document.querySelector('input[type="file"]').value = ''
-}
-
-const cancel = () => {
-  router.push('/kovorkings')
-}
-const submitForm = async () => {
-  if (!form.value.name) {
-    error.value = 'Заполните название'
-    toast.add({
-      severity: 'warn',
-      summary: 'Ошибка валидации',
-      detail: 'Заполните название',
-      life: 4000
-    })
-    return
-  }
-
-  submitting.value = true
+const fetchKovorkings = async (page = 1, perPage = 10) => {
+  loading.value = true
   error.value = null
-
-  const fd = new FormData()
-  fd.append('name', form.value.name)
-  fd.append('building_id', form.value.building_id)
-  if (form.value.floor_number) fd.append('floor_number', form.value.floor_number)
-  if (form.value.capacity) fd.append('capacity', form.value.capacity)
-  if (form.value.from_at) fd.append('from_at', form.value.from_at)
-  if (form.value.to_at) fd.append('to_at', form.value.to_at)
-  if (form.value.description) fd.append('description', form.value.description)
-  if (form.value.image) fd.append('image', form.value.image)
-
+  
   try {
-    const token = localStorage.getItem('token')
-    const response = await axios.post('/kovorkings', fd, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        'Authorization': `Bearer ${token}`
+    const response = await axios.get('/kovorkings', {
+      params: {
+        page: page,
+        perpage: perPage
       }
     })
-
-    // ✅ Проверяем код из ответа
-    if (response.data.code === 0) {
-      toast.add({
-        severity: 'success',
-        summary: 'Успешно',
-        detail: response.data.message || 'Коворкинг успешно создан!',
-        life: 3000
-      })
-      setTimeout(() => router.push('/kovorkings'), 1500)
+    
+    console.log('Kovorkings API Response:', response.data)
+    
+    if (response.data && response.data.data) {
+      kovorkings.value = response.data.data
+      kovorkings_total.value = response.data.total || response.data.data.length
+    } else if (Array.isArray(response.data)) {
+      kovorkings.value = response.data
+      kovorkings_total.value = response.data.length
     } else {
-      // Сервер вернул ошибку (code !== 0) с HTTP 200
-      let errorMsg = response.data.message || 'Неизвестная ошибка'
-      if (response.data.code === 2) {
-        errorMsg = 'Ошибка загрузки изображения: ' + errorMsg
-      }
-      error.value = errorMsg
-      toast.add({
-        severity: 'error',
-        summary: 'Ошибка',
-        detail: errorMsg,
-        life: 5000
-      })
+      kovorkings.value = []
+      kovorkings_total.value = 0
     }
   } catch (err) {
-    // Ошибка сети или HTTP статус 4xx/5xx
-    const responseData = err.response?.data
-    let errorMsg = responseData?.message || err.message || 'Ошибка создания коворкинга'
-
-    if (responseData?.code === 2) {
-      errorMsg = 'Ошибка загрузки изображения: ' + errorMsg
-    }
-    error.value = errorMsg
-    toast.add({
-      severity: 'error',
-      summary: 'Ошибка',
-      detail: errorMsg,
-      life: 5000
-    })
-    console.error('Ошибка создания:', err)
+    error.value = 'Ошибка при загрузке коворкингов'
+    console.error(err)
+    kovorkings.value = []
+    kovorkings_total.value = 0
   } finally {
-    submitting.value = false
+    loading.value = false
   }
 }
+
+const fetchKovorkingsTotal = async () => {
+  try {
+    const response = await axios.get('/kovorkings_total')
+    kovorkings_total.value = typeof response.data === 'number' 
+      ? response.data 
+      : (response.data.total || 0)
+  } catch (err) {
+    console.error('Error fetching total:', err)
+    kovorkings_total.value = 0
+  }
+}
+
+const onPageChange = (event) => {
+  offset.value = event.first
+  perpage.value = event.rows
+  const page = event.first / event.rows + 1
+  fetchKovorkings(page, event.rows)
+}
+
+const goToCreate = () => {
+  router.push('/kovorkings/create')
+}
+
+const editKovorking = (id) => {
+  router.push(`/kovorkings/edit/${id}`)
+}
+
+const deleteKovorking = async (id) => {
+  if (confirm('Вы уверены, что хотите удалить этот коворкинг?')) {
+    try {
+      const token = localStorage.getItem('token')
+      await axios.delete(`/kovorkings/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      fetchKovorkings(1, perpage.value)
+      fetchKovorkingsTotal()
+    } catch (err) {
+      error.value = 'Ошибка при удалении'
+      console.error(err)
+    }
+  }
+}
+
+onMounted(() => {
+  fetchKovorkings(1, perpage.value)
+  fetchKovorkingsTotal()
+})
 </script>
 
 <style scoped>
-/* Тёмная тема, приближенная к PrimeVue Dark */
-.kovorking-create-dark {
-  max-width: 700px;
-  margin: 20px auto;
-  background: #1e1e2f;
-  padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  color: #e0e0e0;
+.kovorkings-list {
+  padding: 20px;
 }
 
-h2 {
-  margin-top: 0;
-  margin-bottom: 24px;
-  font-size: 1.8rem;
-  font-weight: 500;
-  color: #ffffff;
-  border-left: 4px solid #42a5f5;
-  padding-left: 16px;
-}
-
-.form-group {
-  margin-bottom: 20px;
-}
-
-label {
-  display: block;
-  font-weight: 500;
-  margin-bottom: 8px;
-  color: #b0b0b0;
-}
-
-input, select, textarea {
-  width: 100%;
-  padding: 10px 12px;
-  background: #2a2a3a;
-  border: 1px solid #3a3a4a;
-  border-radius: 8px;
-  font-size: 14px;
-  color: #f0f0f0;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-input:focus, select:focus, textarea:focus {
-  outline: none;
-  border-color: #42a5f5;
-  box-shadow: 0 0 0 2px rgba(66, 165, 245, 0.2);
-}
-
-select option {
-  background: #2a2a3a;
-  color: #f0f0f0;
-}
-
-.form-row {
+.header {
   display: flex;
-  gap: 20px;
-}
-
-.form-row .form-group {
-  flex: 1;
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 28px;
-}
-
-button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
-}
-
-button:active {
-  transform: scale(0.98);
-}
-
-.submit-btn {
-  background: #42a5f5;
-  color: white;
-}
-
-.submit-btn:hover:not(:disabled) {
-  background: #1e88e5;
-}
-
-.submit-btn:disabled {
-  background: #5c5c7a;
-  cursor: not-allowed;
-}
-
-.cancel-btn {
-  background: #3a3a4a;
-  color: #e0e0e0;
-}
-
-.cancel-btn:hover {
-  background: #4a4a5a;
-}
-
-.remove-btn {
-  background: #c62828;
-  color: white;
-  padding: 6px 12px;
-  font-size: 14px;
-}
-
-.remove-btn:hover {
-  background: #b71c1c;
-}
-
-.preview {
-  margin-top: 12px;
-  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  background: #2a2a3a;
-  padding: 10px;
-  border-radius: 8px;
-  display: inline-flex;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
-.preview img {
-  border-radius: 6px;
-  border: 1px solid #4a4a5a;
+.header h2 {
+  margin: 0;
+  color: #333;
+}
+
+.loading, .error {
+  text-align: center;
+  padding: 40px;
+  color: #666;
 }
 
 .error {
-  color: #ff8a80;
-  background: #3a1a1a;
-  padding: 10px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  border-left: 4px solid #f44336;
+  color: #f44336;
 }
 
-.info {
-  color: #b0b0b0;
-  font-style: italic;
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+}
+
+.empty i {
+  display: block;
   margin-bottom: 16px;
 }
 
-/* Адаптив */
-@media (max-width: 640px) {
-  .kovorking-create-dark {
-    margin: 10px;
-    padding: 16px;
+.empty p {
+  margin-bottom: 20px;
+}
+
+/* Стиль для миниатюры изображения */
+.preview-img {
+  width: 50px;
+  height: 50px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  background-color: #f9f9f9;
+}
+
+.no-img {
+  display: inline-block;
+  width: 50px;
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .kovorkings-list {
+    padding: 12px;
   }
-  .form-row {
+  .header {
     flex-direction: column;
-    gap: 0;
+    align-items: flex-start;
+  }
+  .preview-img {
+    width: 40px;
+    height: 40px;
   }
 }
 </style>
