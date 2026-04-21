@@ -66,7 +66,7 @@
         </div>
       </template>
     </Menubar>
-    
+    <Toast />
     <main class="flex-1 p-4 bg-gray-900">
       <router-view></router-view>
     </main>
@@ -78,14 +78,15 @@ import { useAuthStore } from '@/stores/authStore';
 import Button from 'primevue/button';
 import Menubar from 'primevue/menubar';
 import InputText from 'primevue/inputtext';
-
+import Toast from 'primevue/toast';
 export default {
   name: 'App',
   
   components: { 
     Button, 
     Menubar, 
-    InputText 
+    InputText,
+    Toast 
   },
   
   data() {

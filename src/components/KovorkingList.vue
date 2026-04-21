@@ -232,7 +232,6 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
-/* Стиль для миниатюры изображения */
 .preview-img {
   width: 50px;
   height: 50px;

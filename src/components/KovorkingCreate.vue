@@ -3,17 +3,6 @@
     <h2>Создание коворкинга</h2>
 
     <div v-if="loadingBuildings" class="info">Загрузка списка зданий...</div>
-    
-    <div v-if="error" class="error">
-      <strong>Ошибка:</strong> {{ error }}
-    </div>
-    
-    <div v-if="serverErrors.length" class="error-list">
-      <strong>Не удалось создать коворкинг:</strong>
-      <ul>
-        <li v-for="(err, idx) in serverErrors" :key="idx">{{ err }}</li>
-      </ul>
-    </div>
 
     <form @submit.prevent="submitForm" class="simple-form">
       <div class="form-group">
@@ -74,12 +63,6 @@
         </button>
       </div>
     </form>
-    
-    <!-- Блок результата создания (без перехода) -->
-    <div v-if="createSuccess" class="success">
-      Коворкинг "{{ createdKovorkingName }}" успешно создан!
-      <button class="success-btn" @click="resetForm">Создать ещё</button>
-    </div>
   </div>
 </template>
 
@@ -87,20 +70,18 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+import { useToast } from 'primevue/usetoast'
 
 const backendUrl = import.meta.env.VITE_API_URL
 axios.defaults.baseURL = backendUrl
 
 const router = useRouter()
+const toast = useToast()
 
 const buildings = ref([])
 const loadingBuildings = ref(false)
-const error = ref(null)
-const serverErrors = ref([])
 const submitting = ref(false)
 const imagePreview = ref(null)
-const createSuccess = ref(false)
-const createdKovorkingName = ref('')
 
 const form = ref({
   name: '',
@@ -113,13 +94,88 @@ const form = ref({
   image: null
 })
 
+const showApiError = (error, defaultMessage = 'Не удалось выполнить действие') => {
+  const status = error.response?.status
+  const data = error.response?.data
+
+  console.log('API Error:', status, data) 
+
+  if (status === 422) {
+    // Вариант 1: { errors: { field: ["message"] } }
+    if (data?.errors && typeof data.errors === 'object') {
+      const firstField = Object.keys(data.errors)[0]
+      const firstMessage = data.errors[firstField]?.[0]
+      toast.add({
+        severity: 'error',
+        summary: 'Ошибка валидации',
+        detail: firstMessage || 'Проверьте заполнение полей',
+        life: 5000,
+      })
+      return
+    }
+    if (data?.message) {
+      toast.add({
+        severity: 'error',
+        summary: 'Ошибка валидации',
+        detail: data.message,
+        life: 5000,
+      })
+      return
+    }
+    if (typeof data === 'string') {
+      toast.add({
+        severity: 'error',
+        summary: 'Ошибка валидации',
+        detail: data,
+        life: 5000,
+      })
+      return
+    }
+    toast.add({
+      severity: 'error',
+      summary: 'Ошибка валидации',
+      detail: 'Неверные данные формы',
+      life: 5000,
+    })
+    return
+  }
+
+  // Остальные статусы
+  switch (status) {
+    case 400:
+      toast.add({ severity: 'error', summary: 'Ошибка запроса', detail: data?.message || 'Некорректные данные', life: 5000 })
+      return
+    case 401:
+      toast.add({ severity: 'error', summary: 'Не авторизован', detail: 'Пожалуйста, войдите снова', life: 5000 })
+      return
+    case 403:
+      toast.add({ severity: 'error', summary: 'Доступ запрещён', detail: 'У вас нет прав для этого действия', life: 5000 })
+      return
+    case 404:
+      toast.add({ severity: 'error', summary: 'Не найдено', detail: 'Ресурс не обнаружен', life: 5000 })
+      return
+    case 500:
+      toast.add({ severity: 'error', summary: 'Ошибка сервера', detail: 'Попробуйте позже', life: 5000 })
+      return
+  }
+
+  // Если есть message в ответе
+  if (data?.message) {
+    toast.add({ severity: 'error', summary: 'Ошибка', detail: data.message, life: 5000 })
+    return
+  }
+
+  // Фолбэк
+  toast.add({ severity: 'error', summary: 'Ошибка', detail: defaultMessage, life: 5000 })
+}
+
 const loadBuildings = async () => {
   loadingBuildings.value = true
   try {
     const res = await axios.get('/buildings')
     buildings.value = res.data.data || res.data || []
   } catch (err) {
-    error.value = 'Не удалось загрузить здания'
+    showApiError(err, 'Не удалось загрузить список зданий')
     console.error(err)
   } finally {
     loadingBuildings.value = false
@@ -129,6 +185,28 @@ const loadBuildings = async () => {
 const onFileChange = (e) => {
   const file = e.target.files[0]
   if (file) {
+    if (file.size > 5 * 1024 * 1024) {
+      toast.add({
+        severity: 'warn',
+        summary: 'Предупреждение',
+        detail: 'Размер файла не должен превышать 5MB',
+        life: 4000
+      })
+      e.target.value = ''
+      return
+    }
+    
+    if (!file.type.startsWith('image/')) {
+      toast.add({
+        severity: 'warn',
+        summary: 'Предупреждение',
+        detail: 'Можно загружать только изображения',
+        life: 4000
+      })
+      e.target.value = ''
+      return
+    }
+    
     form.value.image = file
     const reader = new FileReader()
     reader.onload = (ev) => { imagePreview.value = ev.target.result }
@@ -146,46 +224,32 @@ const removeImage = () => {
   if (fileInput) fileInput.value = ''
 }
 
-const resetForm = () => {
-  createSuccess.value = false
-  createdKovorkingName.value = ''
-  form.value = {
-    name: '',
-    building_id: null,
-    floor_number: null,
-    capacity: null,
-    from_at: null,
-    to_at: null,
-    description: '',
-    image: null
-  }
-  imagePreview.value = null
-  const fileInput = document.querySelector('input[type="file"]')
-  if (fileInput) fileInput.value = ''
-  serverErrors.value = []
-  error.value = null
-}
-
 const cancel = () => {
   router.push('/kovorkings')
 }
 
 const submitForm = async () => {
-  // Валидация
   if (!form.value.name) {
-    error.value = 'Заполните название'
+    toast.add({
+      severity: 'warn',
+      summary: 'Проверьте форму',
+      detail: 'Заполните название коворкинга',
+      life: 4000
+    })
     return
   }
   
   if (!form.value.building_id) {
-    error.value = 'Выберите здание'
+    toast.add({
+      severity: 'warn',
+      summary: 'Проверьте форму',
+      detail: 'Выберите здание',
+      life: 4000
+    })
     return
   }
 
   submitting.value = true
-  error.value = null
-  serverErrors.value = []
-  createSuccess.value = false
 
   const fd = new FormData()
   fd.append('name', form.value.name)
@@ -199,15 +263,19 @@ const submitForm = async () => {
 
   try {
     const token = localStorage.getItem('token')
-    const response = await axios.post('/kovorkings', fd, {
+    await axios.post('/kovorkings', fd, {
       headers: {
         'Content-Type': 'multipart/form-data',
         'Authorization': `Bearer ${token}`
       }
     })
     
-    createSuccess.value = true
-    createdKovorkingName.value = form.value.name
+    toast.add({
+      severity: 'success',
+      summary: 'Успешно',
+      detail: `Коворкинг "${form.value.name}" успешно создан!`,
+      life: 4000
+    })
     
     form.value = {
       name: '',
@@ -225,35 +293,7 @@ const submitForm = async () => {
     
   } catch (err) {
     console.error('Create error:', err)
-    
-    if (err.response?.data) {
-      const data = err.response.data
-      
-      if (data.errors && typeof data.errors === 'object') {
-        const errors = []
-        for (const field in data.errors) {
-          if (Array.isArray(data.errors[field])) {
-            errors.push(`${field}: ${data.errors[field].join(', ')}`)
-          } else {
-            errors.push(`${field}: ${data.errors[field]}`)
-          }
-        }
-        serverErrors.value = errors
-      } 
-      else if (data.message) {
-        error.value = data.message
-      }
-      else if (typeof data === 'string') {
-        error.value = data
-      }
-      else {
-        error.value = 'Ошибка создания коворкинга'
-      }
-    } else if (err.message) {
-      error.value = err.message
-    } else {
-      error.value = 'Неизвестная ошибка'
-    }
+    showApiError(err, 'Не удалось создать коворкинг')
   } finally {
     submitting.value = false
   }
@@ -265,6 +305,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* стили остаются без изменений */
 .kovorking-create-dark {
   max-width: 700px;
   margin: 20px auto;
@@ -396,58 +437,6 @@ button:active {
 .preview img {
   border-radius: 6px;
   border: 1px solid #4a4a5a;
-}
-
-.error {
-  color: #ff8a80;
-  background: #3a1a1a;
-  padding: 10px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  border-left: 4px solid #f44336;
-}
-
-.error-list {
-  color: #ff8a80;
-  background: #3a1a1a;
-  padding: 10px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  border-left: 4px solid #f44336;
-}
-
-.error-list ul {
-  margin: 8px 0 0 20px;
-  padding: 0;
-}
-
-.error-list li {
-  margin: 4px 0;
-}
-
-.success {
-  color: #a5d6a7;
-  background: #1a3a1a;
-  padding: 12px;
-  border-radius: 8px;
-  margin-top: 20px;
-  border-left: 4px solid #4caf50;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.success-btn {
-  background: #4caf50;
-  color: white;
-  padding: 6px 12px;
-  font-size: 13px;
-}
-
-.success-btn:hover {
-  background: #388e3c;
 }
 
 .info {
