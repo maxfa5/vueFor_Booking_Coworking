@@ -51,14 +51,18 @@
       <div class="form-group">
         <label>Изображение</label>
         <input type="file" @change="onFileChange" accept="image/*" />
-        <div v-if="imagePreview" class="preview">
-          <img :src="imagePreview" width="100" />
-          <button type="button" class="remove-btn" @click="removeImage">🗑️</button>
-        </div>
-        <div v-else-if="isEdit && form.picture_url" class="preview">
-          <img :src="form.picture_url" width="100" />
-          <button type="button" class="remove-btn" @click="removeExistingImage">🗑️</button>
-        </div>
+<div v-if="imagePreview" class="preview">
+  <img :src="imagePreview" width="100" />
+  <button type="button" class="remove-btn" @click="removeImage">
+    <i class="pi pi-trash"></i>
+  </button>
+</div>
+<div v-else-if="isEdit && form.picture_url" class="preview">
+  <img :src="form.picture_url" width="100" />
+  <button type="button" class="remove-btn" @click="removeExistingImage">
+    <i class="pi pi-trash"></i>
+  </button>
+</div>
       </div>
 
       <div class="actions">
