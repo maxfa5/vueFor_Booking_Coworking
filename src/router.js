@@ -1,8 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import BookingsList from './components/BookingsList.vue'
 import KovorkingsList from './components/KovorkingList.vue'
-import KovorkingCreate from './components/KovorkingCreate.vue'
-import KovorkingEdit from './components/KovorkingEdit.vue'
+import KovorkingForm from './components/KovorkingForm.vue'
 import BuildingDetail from './components/BuildingDetail.vue'
 import UserList from './components/UserList.vue'
 import UserDetail from './components/UserDetail.vue'
@@ -23,13 +22,13 @@ const routes = [
   },
   {
     path: '/kovorkings/create',
-    name: 'kovorkingCreate',
-    component: KovorkingCreate
+    name: 'kovorking-create',
+    component: KovorkingForm
   },
   {
     path: '/kovorkings/edit/:id',
-    name: 'kovorkingEdit',
-    component: KovorkingEdit
+    name: 'kovorking-edit',
+    component: KovorkingForm
   },
   {
     path: '/kovorkings',
